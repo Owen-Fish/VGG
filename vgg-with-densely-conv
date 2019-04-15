@@ -25,15 +25,13 @@ class VGG13(nn.Module):
                                         nn.Conv2d(4096, 1000, 1), nn.ReLU(inplace=True))
 
     def forward(self, x):
-        print(x.size(0))
         x = self.features(x)
-        # x = x.view(x.size(0), -1)
         out = self.classifier(x)
         return out
 
 
 if __name__ == '__main__':
-    model = VGG13()
-    input = torch.randn((1, 3, 448, 448))
+    model = VGG13()   
+    input = torch.randn((1, 3, 448, 448))  # random create a input. size should follow (batch_size, channes, height, width)
     y = model(input)
     print(y.size())
