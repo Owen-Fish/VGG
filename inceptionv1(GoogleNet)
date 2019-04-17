@@ -5,7 +5,11 @@ import torch.nn.functional as F
 
 class Inception_block(nn.Module):   # creat inception block
     '''
-    num_1_1, num_3_3_reduce, num_3_3, num_5_5_reduce, num_5_5, num_maxpoolproj will be explained in README.md
+    num_1_1 are numbers of 1*1 filter in one inception block
+    num_3_3_reduce are numbers of 1*1 filter before 3*3 filter
+    num_3_3 are numbers of 3*3 filter after num_3_3_reduce 1*1 filter
+    num_5_5_reduce and num_5_5 are same as num_3_3_reduce and num_3_3
+    num_maxpoolproj means filters after maxpooling 
     '''
     def __init__(self, in_channel, num_1_1, num_3_3_reduce, num_3_3, num_5_5_reduce, num_5_5, num_maxpoolproj):
         super(Inception_block, self).__init__()
