@@ -1,0 +1,95 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class Inception_block(nn.Module):   # creat inception block
+    '''
+    num_1_1, num_3_3_reduce, num_3_3, num_5_5_reduce, num_5_5, num_maxpoolproj will be explained in README.md
+    '''
+    def __init__(self, in_channel, num_1_1, num_3_3_reduce, num_3_3, num_5_5_reduce, num_5_5, num_maxpoolproj):
+        super(Inception_block, self).__init__()
+        self.branch1_1 = nn.Sequential(nn.Conv2d(in_channel, num_1_1, kernel_size=(1, 1), stride=1, bias=False), nn.ReLU(inplace=True))
+        self.branch3_3 = nn.Sequential(nn.Conv2d(in_channel, num_3_3_reduce, kernel_size=1, stride=1, bias=False), \
+                                       nn.Conv2d(num_3_3_reduce, num_3_3, kernel_size=(3, 3), stride=1, padding=1, bias=False),\
+                                       nn.ReLU(inplace=True))
+        self.branch5_5 = nn.Sequential(nn.Conv2d(in_channel, num_5_5_reduce, kernel_size=1, stride=1, bias=False), \
+                                       nn.Conv2d(num_5_5_reduce, num_5_5, kernel_size=(5, 5), stride=1, padding=2, bias=False), \
+                                       nn.ReLU(inplace=True))
+        self.bracnch_maxpool = nn.Sequential(nn.MaxPool2d(kernel_size=(3, 3), padding=1, stride=1),\
+                                             nn.Conv2d(in_channel, num_maxpoolproj, kernel_size=(1, 1), stride=1, bias=False), \
+                                             nn.ReLU(inplace=True))
+
+    def forward(self, x):
+        y1 = self.branch1_1(x)
+        y2 = self.branch3_3(x)
+        y3 = self.branch5_5(x)
+        y4 = self.bracnch_maxpool(x)
+        return torch.cat((y1, y2, y3, y4), dim=1)
+
+
+
+
+class GoogleNet(nn.Module):
+    '''
+    create a inception v1 model(inceptionv1 == GoogleNet)
+    '''
+    def __init__(self):
+        super(GoogleNet, self).__init__()
+        self.basicprocess = nn.Sequential(nn.Conv2d(3, 64, kernel_size=(7, 7), stride=2, padding=3, bias=False),\
+                                          nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1), nn.ReLU(inplace=True), \
+                                          nn.Conv2d(64, 64, kernel_size=(1, 1), stride=1),\
+                                          nn.Conv2d(64, 192, kernel_size=(3, 3), stride=1, padding=1),\
+                                          nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1))
+        self.inception3_a = Inception_block(192, 64, 96, 128, 16, 32, 32)
+        self.inception3_b = Inception_block(256, 128, 128, 192, 32, 96, 64)
+        self.maxpool_3 = nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1)
+        self.inception4_a = Inception_block(480, 192, 96, 208, 16, 48, 64)
+        self.inception4_b = Inception_block(512, 160, 112, 224, 24, 64, 64)
+        self.aux1 = nn.Sequential(nn.AvgPool2d(kernel_size=5, stride=3), nn.Conv2d(512, 1024, kernel_size=(1, 1), stride=1), \
+                                  nn.AvgPool2d(kernel_size=(4, 4)))
+        self.aux1_linear = nn.Linear(1024, 1000)
+        self.inception4_c = Inception_block(512, 128, 128, 256, 24, 64, 64)
+        self.inception4_d = Inception_block(512, 112, 114, 288, 32, 64, 64)
+        self.aux2 = nn.Sequential(nn.AvgPool2d(kernel_size=5, stride=3),
+                                  nn.Conv2d(528, 1024, kernel_size=(1, 1), stride=1), \
+                                  nn.AvgPool2d(kernel_size=(4, 4)))
+        self.aux2_linear = nn.Linear(1024, 1000)
+        self.inception4_e = Inception_block(528, 256, 160, 320, 32, 128, 128)
+        self.maxpool_4 = nn.MaxPool2d(kernel_size=(3, 3), stride=2, padding=1)
+        self.inception5_a = Inception_block(832, 256, 160, 320, 32, 128, 128)
+        self.inception5_b = Inception_block(832, 384, 192, 384, 48, 128, 128)
+        self.avgpool_5 = nn.AvgPool2d(kernel_size=(7, 7))   # result: (1024, 1, 1)
+        self.linear_5 = nn.Sequential(nn.Dropout(0.4), nn.Linear(1024, 1000, bias=False))
+
+    def forward(self, x):
+        x = self.basicprocess(x)
+        x = self.inception3_a(x)
+        x = self.inception3_b(x)
+        x = self.maxpool_3(x)
+        x = self.inception4_a(x)
+        aux1 = self.aux1(x)
+        aux1 = aux1.view(aux1.size(0), -1)
+        aux1 = F.softmax(self.aux1_linear(aux1), dim=1)
+        x = self.inception4_b(x)
+        x = self.inception4_c(x)
+        x = self.inception4_d(x)
+        aux2 = self.aux2(x)
+        aux2 = aux2.view(aux2.size(0), -1)
+        aux2 = F.softmax(self.aux2_linear(aux2), dim=1)
+        x = self.inception4_e(x)
+        x = self.maxpool_4(x)
+        x = self.inception5_a(x)
+        x = self.inception5_b(x)
+        x = self.avgpool_5(x)
+        x = x.view(x.size(0), -1)
+        x = F.softmax(self.linear_5(x), dim=1)
+        return x, aux1, aux2
+
+
+if __name__ == "__main__":  # test the network
+    model = GoogleNet()
+    # print(model)
+    input = torch.randn((1, 3, 224, 224))
+    y, aux1, aux2 = model(input)
+    print(y.size(), aux1.size(), aux2.size())   # both size are [1, 1000]
