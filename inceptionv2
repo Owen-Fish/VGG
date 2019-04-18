@@ -1,0 +1,167 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class BasicConv2d(nn.Module):
+
+    def __init__(self, in_channels, out_channels, **kwargs):
+        super(BasicConv2d, self).__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, bias=False, **kwargs)
+        self.bn = nn.BatchNorm2d(out_channels, eps=0.001)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.bn(x)
+        return F.relu(x, inplace=True)
+
+
+class Inception_blockA(nn.Module):
+    '''
+    basic inception module A including 1*1, [1*1.3*3], [1*1, 3*3, 383]， [avgpool, 1*1]
+    '''
+    def __init__(self, in_channel, num_1_1, num_3_3_reduce, num_3_3, double_3_3_reduce, double_3_3, pool_feature):
+        super(Inception_blockA, self).__init__()
+        self.conv1_1_1 = BasicConv2d(in_channel, num_1_1, kernel_size=1)
+        self.conv3_1_1 = BasicConv2d(in_channel, num_3_3_reduce, kernel_size=1)
+        self.conv3_3_3 = BasicConv2d(num_3_3_reduce, num_3_3, kernel_size=3, padding=1)
+        self.conv5_1_1 = BasicConv2d(in_channel, double_3_3_reduce, kernel_size=1)
+        self.conv5_3_3_1 = BasicConv2d(double_3_3_reduce, double_3_3_reduce, kernel_size=3, padding=1)
+        self.conv5_3_3_2 = BasicConv2d(double_3_3_reduce, double_3_3, kernel_size=3, padding=1)
+        self.avgpool = nn.Sequential(nn.AvgPool2d(kernel_size=3, padding=1, stride=1),\
+                                     BasicConv2d(in_channel, pool_feature, kernel_size=1))
+
+    def forward(self, x):
+        y1 = self.conv1_1_1(x)
+        y2 = self.conv3_1_1(x)
+        y2 = self.conv3_3_3(y2)
+        y3 = self.conv5_1_1(x)
+        y3 = self.conv5_3_3_1(y3)
+        y3 = self.conv5_3_3_2(y3)
+        y4 = self.avgpool(x)
+        output = [y1, y2, y3, y4]
+        return torch.cat(output, dim=1)
+
+
+class Inception_blockB(nn.Module):
+    '''
+    basic inception module B including  [1*1.3*3], [1*1, 3*3, 383]， maxpool
+    '''
+    def __init__(self, in_channel, num_3_3_reduce, num_3_3, double_3_3_reduce, double_3_3):
+        super(Inception_blockB, self).__init__()
+        self.conv3_1_1 = BasicConv2d(in_channel, num_3_3_reduce, kernel_size=1)
+        self.conv3_3_3 = BasicConv2d(num_3_3_reduce, num_3_3, kernel_size=3, padding=1, stride=2)
+        self.conv5_1_1 = BasicConv2d(in_channel, double_3_3_reduce, kernel_size=1)
+        self.conv5_3_3_1 = BasicConv2d(double_3_3_reduce, double_3_3_reduce, kernel_size=3, padding=1)
+        self.conv5_3_3_2 = BasicConv2d(double_3_3_reduce, double_3_3, kernel_size=3, padding=1, stride=2)
+        self.avgpool = nn.MaxPool2d(kernel_size=3, padding=1, stride=2)
+
+    def forward(self, x):
+        y2 = self.conv3_1_1(x)
+        y2 = self.conv3_3_3(y2)
+        y3 = self.conv5_1_1(x)
+        y3 = self.conv5_3_3_1(y3)
+        y3 = self.conv5_3_3_2(y3)
+        y4 = self.avgpool(x)
+        output = [y2, y3, y4]
+        return torch.cat(output, dim=1)
+
+
+class Inception_blockC(nn.Module):
+    '''
+    basic inception module C including 1*1, [1*1.3*3], [1*1, 3*3, 383]， [maxpool, 1*1]
+    '''
+    def __init__(self, in_channel, num_1_1, num_3_3_reduce, num_3_3, double_3_3_reduce, double_3_3, pool_feature):
+        super(Inception_blockC, self).__init__()
+        self.conv1_1_1 = BasicConv2d(in_channel, num_1_1, kernel_size=1)
+        self.conv3_1_1 = BasicConv2d(in_channel, num_3_3_reduce, kernel_size=1)
+        self.conv3_3_3 = BasicConv2d(num_3_3_reduce, num_3_3, kernel_size=3, padding=1)
+        self.conv5_1_1 = BasicConv2d(in_channel, double_3_3_reduce, kernel_size=1)
+        self.conv5_3_3_1 = BasicConv2d(double_3_3_reduce, double_3_3_reduce, kernel_size=3, padding=1)
+        self.conv5_3_3_2 = BasicConv2d(double_3_3_reduce, double_3_3, kernel_size=3, padding=1)
+        self.avgpool = nn.Sequential(nn.MaxPool2d(kernel_size=3, padding=1, stride=1),
+                                     BasicConv2d(in_channel, pool_feature, kernel_size=1))
+
+    def forward(self, x):
+        y1 = self.conv1_1_1(x)
+        y2 = self.conv3_1_1(x)
+        y2 = self.conv3_3_3(y2)
+        y3 = self.conv5_1_1(x)
+        y3 = self.conv5_3_3_1(y3)
+        y3 = self.conv5_3_3_2(y3)
+        y4 = self.avgpool(x)
+        output = [y1, y2, y3, y4]
+        return torch.cat(output, dim=1)
+
+
+class AuxLogist(nn.Module):
+    '''
+    Auxiliary output to prevent gradient vanishing
+    '''
+    def __init__(self, inchannel, **kwargs):
+        super(AuxLogist, self).__init__()
+        self.avgpool = nn.AvgPool2d(**kwargs)
+        self.conv = nn.Conv2d(inchannel, 1024, kernel_size=1)
+        self.adapool = nn.AdaptiveAvgPool2d(output_size=(1, 1))
+        self.fc = nn.Linear(1024, 1000)
+
+    def forward(self, x):
+        x = self.avgpool(x)
+        x = self.conv(x)
+        x = self.adapool(x)
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return F.softmax(x, dim=1)
+
+
+class InceptionV2(nn.Module):
+    '''
+    create a inception v2 model: there have two different parts that between inceptionv1 and inceptionv2.
+    1) Batch Normalization
+    2) using two 3*3 kernel take place one 5*5 kernel
+    because of using Batch Normalization dropout stage can be dropped
+    In inceptionv1 there have one main output and two auxiliary output, I dropout one of these two auxiliary output. So
+    in inceptionv2 there have one main output and one auxiliary output
+    '''
+    def __init__(self):
+        super(InceptionV2, self).__init__()
+        self.conv1a = BasicConv2d(3, 64, kernel_size=7, stride=2, padding=3)
+        self.con2a = nn.Sequential(BasicConv2d(64, 64, kernel_size=1), BasicConv2d(64, 192, kernel_size=3, padding=1))
+        self.inception3a = Inception_blockA(192, 64, 64, 64, 64, 96, 32)
+        self.inception3b = Inception_blockA(256, 64, 64, 96, 64, 96, 64)
+        self.inception3c = Inception_blockB(320, 128, 160, 64, 96)
+        self.inception4a = Inception_blockA(576, 224, 64, 96, 96, 128, 128)
+        self.aux1 = AuxLogist(576, kernel_size=5, stride=3)
+        self.inception4b = Inception_blockA(576, 192, 96, 128, 96, 128, 128)
+        self.inception4c = Inception_blockA(576, 160, 128, 160, 128, 160, 96)
+        self.inception4d = Inception_blockA(576, 96, 128, 192, 160, 192, 96)
+        self.inception4e = Inception_blockB(576, 128, 192, 192, 256)
+        self.inception5a = Inception_blockA(1024, 352, 192, 320, 160, 224, 128)
+        self.inception5b = Inception_blockC(1024, 352, 192, 320, 160, 224, 128)
+        self.aux2 = AuxLogist(1024, kernel_size=7, stride=1)
+
+    def forward(self, x):
+        x = F.max_pool2d(self.conv1a(x), kernel_size=3, stride=2, padding=1)
+        x = F.max_pool2d(self.con2a(x), kernel_size=3, stride=2, padding=1)
+        print(x.size())
+        x =self.inception3a(x)
+        x = self.inception3b(x)
+        x = self.inception3c(x)
+        x = self.inception4a(x)
+        aux1 = self.aux1(x)
+        x = self.inception4b(x)
+        x = self.inception4c(x)
+        x = self.inception4d(x)
+        x = self.inception4e(x)
+        x = self.inception5a(x)
+        x = self.inception5b(x)
+        aux2 = self.aux2(x)
+        return aux2, aux1
+
+
+if __name__ == "__main__":
+    model = InceptionV2()
+    # print(model)
+    input = torch.randn((1, 3, 224, 224))
+    main_output, aux_output = model(input)
+    print(main_output.size(), aux_output.size())   # both size are [1, 1000]
