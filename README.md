@@ -1,5 +1,7 @@
-# VGG
 Store several original model of CNNS
+writen by Pytorch
+# VGG
+it's a basic convolution network
 # Inceptionv1
 here are basic block of inceptionv1:https://cn.bing.com/images/search?view=detailV2&id=45AF2681E9F03A94D36DC58E0C215595A2C90C62&thid=OIP.LLq33roQ395gfpMRjjZUjQHaEq&mediaurl=https%3A%2F%2Fcdn-images-1.medium.com%2Fmax%2F1600%2F1*U_McJnp7Fnif-lw9iIC5Bw.png&exph=518&expw=823&q=inceptionv1&selectedindex=4&ajaxhist=0&vt=0&eim=1,2,6
 
